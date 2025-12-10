@@ -142,6 +142,7 @@ public class AptSourceExtractor
     private static string? HandleSignedBy(string content)
     {
         if (string.IsNullOrWhiteSpace(content)) return null;
+        content = content.Trim();
 
         // If it looks like a PGP block (starts with header or contains newlines that suggest a block), save to file
         if (content.Contains("-----BEGIN PGP PUBLIC KEY BLOCK-----") || content.Contains("\n"))
