@@ -416,7 +416,73 @@ Components: main
             Assert.IsTrue(packages.Any());
         }
     }
+    [TestMethod]
+    public async Task TestFetchPackages_FallbackToPlainPackages()
+    {
+        // Arrange
+        var deb822 = @"
+Types: deb
+URIs: http://fallback.test/ubuntu/
+Suites: jammy
+Components: main
+"; // No Signed-By
+
+        var mockData = GenerateMockRepoData();
+        var packagesContent = @"Package: fallback-pkg
+Version: 1.0.0
+Architecture: amd64
+Maintainer: fallback
+Description: fallback
+Filename: pool/main/f/fallback/fallback.deb
+SHA256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+Size: 0
+MD5sum: d41d8cd98f00b204e9800998ecf8427e
+SHA1: da39a3ee5e6b4b0d3255bfef95601890afd80709
+Description-md5: d41d8cd98f00b204e9800998ecf8427e
+Section: misc
+Priority: optional
+Origin: fallback
+Bugs: https://bugs.example.com
+";
+
+        var mockHandler = new MockHttpMessageHandler(request =>
+        {
+            var uri = request.RequestUri?.ToString();
+            if (uri?.EndsWith("InRelease") == true)
+            {
+                return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+                {
+                    Content = new StringContent(mockData.InRelease)
+                });
+            }
+            if (uri?.EndsWith("Packages.gz") == true)
+            {
+                // Simulate 404
+                return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.NotFound));
+            }
+            if (uri?.EndsWith("Packages") == true) // Raw
+            {
+                return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+                {
+                    Content = new StringContent(packagesContent)
+                });
+            }
+            return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.NotFound));
+        });
+
+        var sources = AptSourceExtractor.ExtractSources(deb822, "amd64", () => new HttpClient(mockHandler));
+        var source = sources.First();
+
+        // Act
+        var packages = await source.FetchPackagesAsync();
+
+        // Assert
+        Assert.HasCount(1, packages);
+        Assert.AreEqual("fallback-pkg", packages[0].Package.Package);
+    }
+
     private (string InRelease, byte[] PackagesGz, byte[] PackageDeb) GenerateMockRepoData(string packagesName = "Packages.gz", string packageName = "bash")
+
     {
         // Mock Deb content (random bytes)
         var debContent = new byte[1024];

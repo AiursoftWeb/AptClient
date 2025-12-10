@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Aiursoft.AptClient;
 
@@ -31,8 +32,9 @@ public class AptGpgVerifier
             if (File.Exists(tempFile)) File.Delete(tempFile);
         }
     }
-    
+
     // String overload for compatibility if needed (but we prefer byte[])
+    [ExcludeFromCodeCoverage]
     public static async Task<bool> VerifyInReleaseAsync(string inReleaseContent, string keyringPath)
     {
         return await VerifyInReleaseAsync(Encoding.UTF8.GetBytes(inReleaseContent), keyringPath);
@@ -63,11 +65,11 @@ public class AptGpgVerifier
             var errorTask = process.StandardError.ReadToEndAsync();
 
             await process.WaitForExitAsync();
-            
+
             var output = await outputTask;
             // Check for GOODSIG. gpgv might return non-zero if othersigs fail, but GOODSIG means at least one is valid.
             if (output.Contains("[GNUPG:] GOODSIG")) return true;
-            
+
             // If we are here, verification failed.
             var err = await errorTask;
             if (!string.IsNullOrWhiteSpace(err))

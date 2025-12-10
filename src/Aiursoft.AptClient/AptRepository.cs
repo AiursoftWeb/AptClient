@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Aiursoft.AptClient;
 
@@ -127,5 +128,6 @@ public class AptRepository
     // Helper to get InRelease URL solely for error reporting
     private string InReleaseUrl => $"{BaseUrl}dists/{Suite}/InRelease";
 
+    [ExcludeFromCodeCoverage]
     public override string ToString() => $"{BaseUrl} ({Suite})";
 }

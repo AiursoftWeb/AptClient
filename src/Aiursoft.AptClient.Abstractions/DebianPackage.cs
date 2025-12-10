@@ -1,5 +1,8 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace Aiursoft.AptClient.Abstractions;
 
+[ExcludeFromCodeCoverage]
 public class DebianPackage
 {
     // ==========================================
