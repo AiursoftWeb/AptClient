@@ -1,7 +1,10 @@
 
 
+using System.Diagnostics.CodeAnalysis;
+
 namespace Aiursoft.AptClient.SampleApp;
 
+[ExcludeFromCodeCoverage]
 class Program
 {
     private static int _getCounter = 1;
