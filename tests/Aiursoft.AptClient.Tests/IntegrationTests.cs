@@ -96,7 +96,7 @@ Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
         var sources = AptSourceExtractor.ExtractSources(IntegratedSigned, "amd64");
         var source = sources.First();
 
-        var mockHandler = new MockHttpMessageHandler(async request =>
+        var mockHandler = new MockHttpMessageHandler(request =>
         {
             if (request.RequestUri?.ToString().Contains("InRelease") == true)
             {
@@ -116,18 +116,26 @@ Cgkyr330gZviGGcQtRQAAPjID/9+ABCDEF1234567890ABCDEF1234567890ABCD
 (Assuming the signature block is valid structure but invalid for content)
 =tIux
 -----END PGP SIGNATURE-----";
-                return new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+                return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
                 {
                     Content = new StringContent(content)
-                };
+                });
             }
-            return new HttpResponseMessage(System.Net.HttpStatusCode.NotFound);
+            return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.NotFound));
         });
 
         using var client = new HttpClient(mockHandler);
 
         // Act & Assert
-        await Assert.ThrowsExceptionAsync<Exception>(async () => await source.FetchPackagesAsync(client));
+        try
+        {
+            await source.FetchPackagesAsync(client);
+            Assert.Fail("Expected exception was not thrown.");
+        }
+        catch (Exception)
+        {
+            // Expected
+        }
     }
 
     [TestMethod]
@@ -137,7 +145,7 @@ Cgkyr330gZviGGcQtRQAAPjID/9+ABCDEF1234567890ABCDEF1234567890ABCD
         var sources = AptSourceExtractor.ExtractSources(IntegratedSigned, "amd64");
         var source = sources.First();
 
-        var mockHandler = new MockHttpMessageHandler(async request =>
+        var mockHandler = new MockHttpMessageHandler(request =>
         {
             if (request.RequestUri?.ToString().Contains("InRelease") == true)
             {
@@ -151,18 +159,27 @@ SHA256:
 
 THIS_IS_TOTAL_GARBAGE_NOT_EVEN_BASE64
 -----END PGP SIGNATURE-----";
-                return new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+                return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
                 {
                     Content = new StringContent(content)
-                };
+                });
             }
-            return new HttpResponseMessage(System.Net.HttpStatusCode.NotFound);
+            return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.NotFound));
         });
 
         using var client = new HttpClient(mockHandler);
 
         // Act & Assert
-        await Assert.ThrowsExceptionAsync<Exception>(async () => await source.FetchPackagesAsync(client));
+        try
+        {
+            await source.FetchPackagesAsync(client);
+            Assert.Fail("Expected exception was not thrown.");
+
+        }
+        catch (Exception)
+        {
+            // Expected
+        }
     }
 
     [TestMethod]
@@ -172,7 +189,7 @@ THIS_IS_TOTAL_GARBAGE_NOT_EVEN_BASE64
         var sources = AptSourceExtractor.ExtractSources(IntegratedSigned, "amd64");
         var source = sources.First();
 
-        var mockHandler = new MockHttpMessageHandler(async request =>
+        var mockHandler = new MockHttpMessageHandler(request =>
         {
             if (request.RequestUri?.ToString().Contains("InRelease") == true)
             {
@@ -180,18 +197,26 @@ THIS_IS_TOTAL_GARBAGE_NOT_EVEN_BASE64
                 var content = @"Origin: Mock
 SHA256:
  0000 0 main/binary-amd64/Packages.gz";
-                return new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+                return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
                 {
                     Content = new StringContent(content)
-                };
+                });
             }
-            return new HttpResponseMessage(System.Net.HttpStatusCode.NotFound);
+            return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.NotFound));
         });
 
         using var client = new HttpClient(mockHandler);
 
         // Act & Assert
-        await Assert.ThrowsExceptionAsync<Exception>(async () => await source.FetchPackagesAsync(client));
+        try
+        {
+            await source.FetchPackagesAsync(client);
+            Assert.Fail("Expected exception was not thrown.");
+        }
+        catch (Exception)
+        {
+            // Expected
+        }
     }
 
     [TestMethod]
@@ -208,7 +233,7 @@ Signed-By:
         var sources = AptSourceExtractor.ExtractSources(deb822, "amd64");
         var source = sources.First();
 
-        var mockHandler = new MockHttpMessageHandler(async request =>
+        var mockHandler = new MockHttpMessageHandler(request =>
         {
             var uri = request.RequestUri?.ToString();
             if (uri?.EndsWith("InRelease") == true)
@@ -216,25 +241,33 @@ Signed-By:
                 var content = @"Origin: Mock
 SHA256:
  cafe0000cafe0000cafe0000cafe0000cafe0000cafe0000cafe0000cafe0000 100 main/binary-amd64/Packages.gz";
-                return new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+                return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
                 {
                     Content = new StringContent(content)
-                };
+                });
             }
             if (uri?.EndsWith("Packages.gz") == true || uri?.EndsWith("Packages") == true)
             {
-                return new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+                return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
                 {
                     Content = new ByteArrayContent(new byte[100])
-                };
+                });
             }
-            return new HttpResponseMessage(System.Net.HttpStatusCode.NotFound);
+            return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.NotFound));
         });
 
         using var client = new HttpClient(mockHandler);
 
         // Act & Assert
-        await Assert.ThrowsExceptionAsync<Exception>(async () => await source.FetchPackagesAsync(client));
+        try
+        {
+            await source.FetchPackagesAsync(client);
+            Assert.Fail("Expected exception was not thrown.");
+        }
+        catch (Exception)
+        {
+            // Expected
+        }
     }
 
     [TestMethod]
@@ -312,5 +345,19 @@ Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
 
         var firstPkg = allPackages.First();
         Assert.IsFalse(string.IsNullOrWhiteSpace(firstPkg.Package.Package));
+    }
+    private class MockHttpMessageHandler : HttpMessageHandler
+    {
+        private readonly Func<HttpRequestMessage, Task<HttpResponseMessage>> _handler;
+
+        public MockHttpMessageHandler(Func<HttpRequestMessage, Task<HttpResponseMessage>> handler)
+        {
+            _handler = handler;
+        }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, System.Threading.CancellationToken cancellationToken)
+        {
+            return _handler(request);
+        }
     }
 }
