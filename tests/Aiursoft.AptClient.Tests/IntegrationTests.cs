@@ -413,7 +413,7 @@ Components: main
         {
             var packages = await aptSource.FetchPackagesAsync();
             Console.WriteLine($"Found {packages.Count} packages in {aptSource.Suite}");
-            Assert.IsTrue(packages.Any());
+            Assert.IsNotEmpty(packages);
         }
     }
     [TestMethod]

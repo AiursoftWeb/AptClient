@@ -80,13 +80,13 @@ Signed-By:
         {
             // Progress logic...
             totalBytes += size;
-            string sizeStr = FormatBytes(size);
+            var sizeStr = FormatBytes(size);
 
             // Try to extract useful "apt-like" info
             // url: http://.../dists/questing/InRelease -> questing InRelease
             // url: http://.../dists/questing/main/binary-amd64/Packages.gz -> questing/main amd64 Packages
 
-            string display = url;
+            var display = url;
             if (url.Contains("/dists/"))
             {
                 // ... same display logic
@@ -137,14 +137,14 @@ Signed-By:
 
         sw.Stop();
 
-        string totalSizeStr = FormatBytes(totalBytes);
-        double totalSeconds = sw.Elapsed.TotalSeconds;
+        var totalSizeStr = FormatBytes(totalBytes);
+        var totalSeconds = sw.Elapsed.TotalSeconds;
         if (totalSeconds < 0.001) totalSeconds = 0.001;
-        double speed = (totalBytes / 1024.0) / totalSeconds;
+        var speed = (totalBytes / 1024.0) / totalSeconds;
 
         Console.WriteLine($"Fetched {totalSizeStr} in {sw.Elapsed.Seconds}s ({speed:N0} kB/s)");
 
-        if (allPackages.Any())
+        if (allPackages.Count != 0)
         {
             var firstPkgInfo = allPackages.First();
             var pkg = firstPkgInfo.Package;
@@ -177,11 +177,11 @@ Signed-By:
     static string FormatBytes(long bytes)
     {
         if (bytes < 1024) return $"{bytes} B";
-        double kb = bytes / 1024.0;
+        var kb = bytes / 1024.0;
         if (kb < 1000) return $"{kb:N1} kB".Replace(".0 kB", " kB");
-        double mb = kb / 1024.0;
+        var mb = kb / 1024.0;
         if (mb < 1000) return $"{mb:N1} MB";
-        double gb = mb / 1024.0;
+        var gb = mb / 1024.0;
         return $"{gb:N1} GB";
     }
 }

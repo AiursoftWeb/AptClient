@@ -232,7 +232,7 @@ public class AptSourceExtractor
         //  continued value
 
         string? currentKey = null;
-        string currentValue = "";
+        var currentValue = "";
 
         using var reader = new StringReader(block);
         string? line;

@@ -55,7 +55,7 @@ public class AptRepository
         if (!string.IsNullOrWhiteSpace(SignedBy))
         {
             // Assuming AptGpgVerifier is available
-            bool isValid = await AptGpgVerifier.VerifyInReleaseAsync(inReleaseBytes, SignedBy);
+            var isValid = await AptGpgVerifier.VerifyInReleaseAsync(inReleaseBytes, SignedBy);
             if (!isValid)
             {
                 throw new Exception($"GPG Verification failed for {InReleaseUrl} using key {SignedBy}");

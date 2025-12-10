@@ -15,7 +15,7 @@ public static class DebianPackageParser
         string? line;
         Dictionary<string, string>? currentPackage = null;
         string? currentKey = null;
-        StringBuilder currentValue = new StringBuilder();
+        var currentValue = new StringBuilder();
 
         while ((line = reader.ReadLine()) != null)
         {
