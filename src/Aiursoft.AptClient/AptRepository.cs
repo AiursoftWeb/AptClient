@@ -18,7 +18,10 @@ public class AptRepository
         BaseUrl = baseUrl.EndsWith("/") ? baseUrl : baseUrl + "/";
         Suite = suite;
         SignedBy = signedBy;
+        _httpClientFactory = httpClientFactory ?? (() => new HttpClient());
     }
+
+    private readonly Func<HttpClient> _httpClientFactory;
 
     /// <summary>
     /// Ensures the repository metadata (InRelease) is downloaded and verified.
@@ -29,7 +32,7 @@ public class AptRepository
         if (_isVerified && _trustedHashes != null) return;
 
         var inReleaseUrl = $"{BaseUrl}dists/{Suite}/InRelease";
-        using var client = new HttpClient();
+        using var client = _httpClientFactory();
 
         // 1. Download InRelease data as bytes to preserve exact signature
         byte[] inReleaseBytes;
@@ -87,7 +90,7 @@ public class AptRepository
         }
 
         var url = $"{BaseUrl}dists/{Suite}/{relativePath}";
-        using var client = new HttpClient();
+        using var client = _httpClientFactory();
 
         // Download
         var response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);

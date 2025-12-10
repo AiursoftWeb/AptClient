@@ -95,9 +95,6 @@ Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
     public async Task TestSignatureVerification_FailsOnTamperedContent()
     {
         // Arrange
-        var sources = AptSourceExtractor.ExtractSources(IntegratedSigned, "amd64");
-        var source = sources.First();
-
         var mockHandler = new MockHttpMessageHandler(request =>
         {
             if (request.RequestUri?.ToString().Contains("InRelease") == true)
@@ -126,12 +123,13 @@ Cgkyr330gZviGGcQtRQAAPjID/9+ABCDEF1234567890ABCDEF1234567890ABCD
             return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.NotFound));
         });
 
-        using var client = new HttpClient(mockHandler);
+        var sources = AptSourceExtractor.ExtractSources(IntegratedSigned, "amd64", () => new HttpClient(mockHandler));
+        var source = sources.First();
 
         // Act & Assert
         try
         {
-            await source.FetchPackagesAsync(client);
+            await source.FetchPackagesAsync();
             Assert.Fail("Expected exception was not thrown.");
         }
         catch (Exception)
@@ -144,9 +142,6 @@ Cgkyr330gZviGGcQtRQAAPjID/9+ABCDEF1234567890ABCDEF1234567890ABCD
     public async Task TestSignatureVerification_FailsOnGarbageSignature()
     {
         // Arrange
-        var sources = AptSourceExtractor.ExtractSources(IntegratedSigned, "amd64", () => new HttpClient(mockHandler));
-        var source = sources.First();
-
         var mockHandler = new MockHttpMessageHandler(request =>
         {
             if (request.RequestUri?.ToString().Contains("InRelease") == true)
@@ -169,7 +164,8 @@ THIS_IS_TOTAL_GARBAGE_NOT_EVEN_BASE64
             return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.NotFound));
         });
 
-        // using var client = new HttpClient(mockHandler);
+        var sources = AptSourceExtractor.ExtractSources(IntegratedSigned, "amd64", () => new HttpClient(mockHandler));
+        var source = sources.First();
 
         // Act & Assert
         try
@@ -188,9 +184,6 @@ THIS_IS_TOTAL_GARBAGE_NOT_EVEN_BASE64
     public async Task TestSignatureVerification_FailsOnNoSignature()
     {
         // Arrange
-        var sources = AptSourceExtractor.ExtractSources(IntegratedSigned, "amd64", () => new HttpClient(mockHandler));
-        var source = sources.First();
-
         var mockHandler = new MockHttpMessageHandler(request =>
         {
             if (request.RequestUri?.ToString().Contains("InRelease") == true)
@@ -207,12 +200,13 @@ SHA256:
             return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.NotFound));
         });
 
-        using var client = new HttpClient(mockHandler);
+        var sources = AptSourceExtractor.ExtractSources(IntegratedSigned, "amd64", () => new HttpClient(mockHandler));
+        var source = sources.First();
 
         // Act & Assert
         try
         {
-            await source.FetchPackagesAsync(client);
+            await source.FetchPackagesAsync();
             Assert.Fail("Expected exception was not thrown.");
         }
         catch (Exception)
@@ -232,9 +226,6 @@ Suites: jammy
 Components: main
 Signed-By:
 ";
-        var sources = AptSourceExtractor.ExtractSources(deb822, "amd64", () => new HttpClient(mockHandler));
-        var source = sources.First();
-
         var mockHandler = new MockHttpMessageHandler(request =>
         {
             var uri = request.RequestUri?.ToString();
@@ -258,12 +249,13 @@ SHA256:
             return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.NotFound));
         });
 
-        using var client = new HttpClient(mockHandler);
+        var sources = AptSourceExtractor.ExtractSources(deb822, "amd64", () => new HttpClient(mockHandler));
+        var source = sources.First();
 
         // Act & Assert
         try
         {
-            await source.FetchPackagesAsync(client);
+            await source.FetchPackagesAsync();
             Assert.Fail("Expected exception was not thrown.");
         }
         catch (Exception)
