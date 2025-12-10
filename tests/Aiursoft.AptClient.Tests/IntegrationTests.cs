@@ -343,6 +343,24 @@ Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
         var firstPkg = allPackages.First();
         Assert.IsFalse(string.IsNullOrWhiteSpace(firstPkg.Package.Package));
     }
+
+    [TestMethod]
+    public async Task TestReadmeSample()
+    {
+        var source = "deb http://archive.ubuntu.com/ubuntu/ jammy main";
+        var sources = AptSourceExtractor.ExtractSources(source, "amd64");
+
+        using var http = new HttpClient();
+        http.DefaultRequestHeaders.UserAgent.ParseAdd("Aiursoft.AptClient.Tests");
+
+        Assert.HasCount(1, sources);
+        foreach (var aptSource in sources)
+        {
+            var packages = await aptSource.FetchPackagesAsync(http);
+            Console.WriteLine($"Found {packages.Count} packages in {aptSource.Suite}");
+            Assert.IsNotEmpty(packages);
+        }
+    }
     private class MockHttpMessageHandler : HttpMessageHandler
     {
         private readonly Func<HttpRequestMessage, Task<HttpResponseMessage>> _handler;
