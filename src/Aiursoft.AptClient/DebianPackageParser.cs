@@ -2,6 +2,8 @@ using System.Text;
 
 namespace Aiursoft.AptClient;
 
+using Abstractions;
+
 public static class DebianPackageParser
 {
     private const int BufferSize = 1024 * 4;
@@ -9,7 +11,7 @@ public static class DebianPackageParser
     public static IEnumerable<Dictionary<string, string>> Parse(Stream stream)
     {
         using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, bufferSize: BufferSize, leaveOpen: true);
-        
+
         string? line;
         Dictionary<string, string>? currentPackage = null;
         string? currentKey = null;
@@ -60,11 +62,11 @@ public static class DebianPackageParser
         // InRelease is just a signed Debian control file (similar format)
         // We wrap it in a stream to reuse the parser
         using var ms = new MemoryStream(Encoding.UTF8.GetBytes(content));
-        
+
         // The parser returns a list of "paragraphs". InRelease usually has one main paragraph with checksums.
         var paragraphs = Parse(ms).ToList();
         var mainParagraph = paragraphs.FirstOrDefault(p => p.ContainsKey("SHA256"));
-        
+
         var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         if (mainParagraph == null) return result;
 
@@ -124,11 +126,11 @@ public static class DebianPackageParser
         };
 
         // Remove mapped keys to store the rest in Extras
-        var knownKeys = new[] { "Package", "Version", "Architecture", "Maintainer", "Description", "Description-md5", 
+        var knownKeys = new[] { "Package", "Version", "Architecture", "Maintainer", "Description", "Description-md5",
                                 "Section", "Priority", "Origin", "Bugs", "Filename", "Size", "MD5sum", "SHA1", "SHA256", "SHA512",
-                                "Installed-Size", "Original-Maintainer", "Homepage", "Depends", "Source", "Multi-Arch", 
+                                "Installed-Size", "Original-Maintainer", "Homepage", "Depends", "Source", "Multi-Arch",
                                 "Provides", "Suggests", "Recommends", "Conflicts", "Breaks", "Replaces" };
-        
+
         foreach (var key in knownKeys) dict.Remove(key);
         foreach (var kvp in dict) pkg.Extras[kvp.Key] = kvp.Value;
 
