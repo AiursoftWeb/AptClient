@@ -2,13 +2,15 @@
 
 namespace Aiursoft.AptClient.Tests;
 
+using System.Diagnostics;
+
 [TestClass]
 public class IntegrationTests
 {
 
     private readonly string IntegratedSigned =
             @"Types: deb
-URIs: https://mirror-ppa.aiursoft.com/mozillateam/ppa/ubuntu/
+URIs: https://mirror-ppa.aiursoft.cn/mozillateam/ppa/ubuntu/
 Suites: questing
 Components: main
 Signed-By:
@@ -50,7 +52,7 @@ Signed-By:
         // Removed Signed-By to skip signature verification for mock
         var deb822 = @"
 Types: deb
-URIs: http://mirrors.aliyun.com/ubuntu/
+URIs: http://mirror.aiursoft.com/ubuntu/
 Suites: jammy
 Components: main
 ";
@@ -275,12 +277,12 @@ SHA256:
     [TestMethod]
     public void TestParseLegacyFormat()
     {
-        var line = "deb [signed-by=/usr/share/keyrings/ubuntu-archive-keyring.gpg] http://mirrors.aliyun.com/ubuntu/ jammy main restricted";
+        var line = "deb [signed-by=/usr/share/keyrings/ubuntu-archive-keyring.gpg] http://mirror.aiursoft.com/ubuntu/ jammy main restricted";
         var sources = AptSourceExtractor.ExtractSources(line, "amd64");
 
         Assert.HasCount(2, sources);
         Assert.AreEqual("jammy", sources[0].Suite);
-        Assert.AreEqual("http://mirrors.aliyun.com/ubuntu/", sources[0].ServerUrl);
+        Assert.AreEqual("http://mirror.aiursoft.com/ubuntu/", sources[0].ServerUrl);
     }
 
     [TestMethod]
@@ -288,7 +290,7 @@ SHA256:
     {
         var deb822 = @"
 Types: deb
-URIs: http://mirrors.aliyun.com/ubuntu/
+URIs: http://mirror.aiursoft.com/ubuntu/
 Suites: jammy
 Components: main
 ";
@@ -348,42 +350,125 @@ Components: main
     [TestMethod]
     public async Task TestFetchFromIntegratedSigned()
     {
-        var sources = AptSourceExtractor.ExtractSources(IntegratedSigned, "amd64", () =>
-        {
-            var cl = new HttpClient();
-            cl.DefaultRequestHeaders.UserAgent.ParseAdd("Aiursoft.AptClient.Tests");
-            return cl;
-        });
-        Assert.AreNotEqual(0, sources.Count);
+        // 1. Generate Mock Data (Unsigned)
+        var mockRepo = GenerateMockRepoData();
 
-        // using var client = new HttpClient();
-        // client.DefaultRequestHeaders.UserAgent.ParseAdd("Aiursoft.AptClient.Tests");
+        // 2. Generate GPG Key and Sign the InRelease content
+        var (pubKey, signedInRelease) = GenerateGpgKeyAndSignedContent(mockRepo.InRelease);
+
+        // 3. Construct Source String with the Generated Public Key
+        // Note: URIs can be anything since we mock it.
+        var sourceStr = $@"
+Types: deb
+URIs: https://mock-ppa.aiursoft.cn/mozillateam/ppa/ubuntu/
+Suites: questing
+Components: main
+Signed-By:
+{pubKey}
+";
+
+        // 4. Setup Mock Handler
+        var mockHandler = new MockHttpMessageHandler(request =>
+        {
+            var uri = request.RequestUri?.ToString();
+            if (uri?.EndsWith("InRelease") == true)
+            {
+                return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+                {
+                    Content = new StringContent(signedInRelease)
+                });
+            }
+            if (uri?.EndsWith("Packages.gz") == true)
+            {
+                return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+                {
+                    Content = new ByteArrayContent(mockRepo.PackagesGz)
+                });
+            }
+            return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.NotFound));
+        });
+
+        // 5. Run Logic
+        var sources = AptSourceExtractor.ExtractSources(sourceStr, "amd64", () => new HttpClient(mockHandler));
+        Assert.AreNotEqual(0, sources.Count);
 
         var allPackages = new List<DebianPackageFromApt>();
         foreach (var source in sources)
         {
-            try
-            {
-                var packages = await source.FetchPackagesAsync();
-                allPackages.AddRange(packages);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error fetching from {source.ServerUrl}: {ex.Message}");
-                throw;
-            }
+            var packages = await source.FetchPackagesAsync();
+            allPackages.AddRange(packages);
         }
 
-        Assert.AreNotEqual(0, allPackages.Count, "No packages found in PPA");
-
+        Assert.AreNotEqual(0, allPackages.Count, "No packages found in Signed Repo");
         var firstPkg = allPackages.First();
         Assert.IsFalse(string.IsNullOrWhiteSpace(firstPkg.Package.Package));
+    }
+
+    private (string PublicKey, string SignedContent) GenerateGpgKeyAndSignedContent(string content)
+    {
+        var tempHome = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+        Directory.CreateDirectory(tempHome);
+        try
+        {
+            // Gen Key (Must use --pinentry-mode loopback or similar if gpg version requires it, but --quick-gen-key usually fine without passphrase)
+            // Using default default default for expiration
+            RunGpg(tempHome, "--batch --pinentry-mode loopback --passphrase '' --quick-gen-key \"Mock User\" default default");
+
+            // Export Public Key
+            var pubKey = RunGpg(tempHome, "--export --armor \"Mock User\"");
+
+            // Sign Content
+            var unsignedFile = Path.Combine(tempHome, "unsigned.txt");
+            File.WriteAllText(unsignedFile, content);
+
+            // --yes to overwrite, --clearsign for InRelease format
+            RunGpg(tempHome, $"--batch --yes --pinentry-mode loopback --passphrase '' --clearsign --output \"{unsignedFile}.asc\" \"{unsignedFile}\"");
+            var signedContent = File.ReadAllText(unsignedFile + ".asc");
+
+            return (pubKey, signedContent);
+        }
+        finally
+        {
+            try { Directory.Delete(tempHome, true); } catch { }
+        }
+    }
+
+    private string RunGpg(string home, string args)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = "gpg",
+            Arguments = $"--homedir \"{home}\" {args}",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        using var p = Process.Start(psi);
+        if (p == null) throw new Exception("Failed to start GPG");
+
+        var outputReader = p.StandardOutput;
+        var errorReader = p.StandardError;
+
+        // Wait for exit
+        p.WaitForExit();
+
+        var output = outputReader.ReadToEnd(); // Read after exit to avoid deadlock if small buffer? Better to read async but for test small data ok.
+                                               // Actually best practice is to read before wait or async.
+                                               // Since we used ReadToEndAsync in checking code, let's use valid approach:
+
+        if (p.ExitCode != 0)
+        {
+            var err = errorReader.ReadToEnd();
+            throw new Exception($"GPG Failed (Exit {p.ExitCode}): {err}\nArgs: {args}");
+        }
+        return output;
     }
 
     [TestMethod]
     public async Task TestReadmeSample()
     {
-        var sourceText = "deb http://archive.ubuntu.com/ubuntu/ jammy main";
+        var sourceText = "deb http://mirror.aiursoft.com/ubuntu/ jammy main";
         var mockData = GenerateMockRepoData();
 
         var mockHandler = new MockHttpMessageHandler(request =>
