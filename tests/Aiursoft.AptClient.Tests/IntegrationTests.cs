@@ -1,6 +1,3 @@
-using Microsoft.VisualStudio.TestTools.UnitTesting;
-using Aiursoft.AptClient;
-
 [assembly: Parallelize(Scope = ExecutionScope.MethodLevel)]
 
 namespace Aiursoft.AptClient.Tests;
@@ -276,7 +273,7 @@ SHA256:
         var line = "deb [signed-by=/usr/share/keyrings/ubuntu-archive-keyring.gpg] http://mirrors.aliyun.com/ubuntu/ jammy main restricted";
         var sources = AptSourceExtractor.ExtractSources(line, "amd64");
 
-        Assert.AreEqual(2, sources.Count);
+        Assert.HasCount(2, sources);
         Assert.AreEqual("jammy", sources[0].Suite);
         Assert.AreEqual("http://mirrors.aliyun.com/ubuntu/", sources[0].ServerUrl);
     }
@@ -355,7 +352,7 @@ Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
             _handler = handler;
         }
 
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, System.Threading.CancellationToken cancellationToken)
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             return _handler(request);
         }
