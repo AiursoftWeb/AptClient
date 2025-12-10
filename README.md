@@ -24,10 +24,9 @@ using Aiursoft.AptClient;
 var source = "deb http://archive.ubuntu.com/ubuntu/ jammy main";
 var sources = AptSourceExtractor.ExtractSources(source, "amd64");
 
-using var http = new HttpClient();
 foreach (var aptSource in sources)
 {
-    var packages = await aptSource.FetchPackagesAsync(http);
+    var packages = await aptSource.FetchPackagesAsync();
     Console.WriteLine($"Found {packages.Count} packages in {aptSource.Suite}");
 }
 ```

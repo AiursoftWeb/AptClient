@@ -12,12 +12,14 @@ dotnet add package Aiursoft.AptClient
 
 ## 1. Parsing APT Sources
 
-You can parse APT source configurations (both modern `deb822` format and legacy `.list` logic) using the `AptSourceExtractor`.
+You can parse APT source configurations using `AptSourceExtractor`. The library supports:
+1.  **Modern Deb822 Format** (`.sources`)
+2.  **Legacy One-Line Format** (`.list`)
+3.  **PPA Configurations** (including inline GPG keys)
 
+### Example 1: Modern Deb822 Format
 ```csharp
-using Aiursoft.AptClient;
-
-var sourceContent = @"
+var deb822 = @"
 Types: deb
 URIs: http://mirrors.aliyun.com/ubuntu/
 Suites: questing
@@ -25,10 +27,27 @@ Components: main restricted universe multiverse
 Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
 ";
 
-// Extract valid package sources for the 'amd64' architecture
-List<AptPackageSource> sources = AptSourceExtractor.ExtractSources(sourceContent, "amd64");
+var sources = AptSourceExtractor.ExtractSources(deb822, "amd64");
+```
 
-Console.WriteLine($"Extracted {sources.Count} sources.");
+### Example 2: Legacy One-Line Format
+```csharp
+var legacy = "deb [signed-by=/usr/share/keyrings/ubuntu-archive-keyring.gpg] http://mirrors.aliyun.com/ubuntu/ questing-updates main restricted";
+var sources = AptSourceExtractor.ExtractSources(legacy, "amd64");
+```
+
+### Example 3: PPA with Inline Keys
+```csharp
+var ppa = @"Types: deb
+URIs: https://mirror-ppa.aiursoft.com/mozillateam/ppa/ubuntu/
+Suites: questing
+Components: main
+Signed-By:
+ -----BEGIN PGP PUBLIC KEY BLOCK-----
+ ... (key content) ...
+ -----END PGP PUBLIC KEY BLOCK-----
+";
+var sources = AptSourceExtractor.ExtractSources(ppa, "amd64");
 ```
 
 ## 2. Fetching Package Lists
@@ -39,8 +58,6 @@ Once you have a list of `AptPackageSource` objects, you can fetch the available 
 using Aiursoft.AptClient;
 using System.Net.Http;
 
-using var httpClient = new HttpClient();
-
 foreach (var source in sources)
 {
     Console.WriteLine($"Fetching packages from {source.ServerUrl} ({source.Suite})...");
@@ -48,7 +65,7 @@ foreach (var source in sources)
     try 
     {
         // Fetch packages with an optional progress callback
-        var packages = await source.FetchPackagesAsync(httpClient, (url, size) => 
+        var packages = await source.FetchPackagesAsync((url, size) => 
         {
             Console.WriteLine($"Downloading {url} ({size} bytes)");
         });
@@ -91,7 +108,7 @@ if (myPackageInfo != null)
 
     Console.WriteLine($"Downloading {package.Package} to {destinationPath}...");
 
-    await source.DownloadPackageAsync(package, destinationPath, httpClient, (downloaded, total) => 
+    await source.DownloadPackageAsync(package, destinationPath, (downloaded, total) => 
     {
         var percent = (double)downloaded / total * 100;
         Console.Write($"\rProgress: {percent:F1}%");
@@ -108,3 +125,12 @@ The `Aiursoft.AptClient` workflow typically involves:
 1.  **Extracting Sources**: logic to convert raw configuration text into `AptPackageSource` objects.
 2.  **Fetching Indices**: `FetchPackagesAsync` to get a catalog of all available packages.
 3.  **Downloading**: `DownloadPackageAsync` to retrieve and verify actual `.deb` files.
+
+## Running the Sample Application
+
+For a complete, runnable example that demonstrates all these features together, check out the `Aiursoft.AptClient.SampleApp` project in the `src` directory.
+
+```bash
+cd src/Aiursoft.AptClient.SampleApp
+dotnet run
+```
