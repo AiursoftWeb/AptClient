@@ -1,4 +1,7 @@
-﻿namespace Aiursoft.AptClient;
+using Aiursoft.AptClient;
+using Aiursoft.AptClient.Abstractions;
+
+namespace Aiursoft.AptClient.SampleApp;
 
 class Program
 {
@@ -59,7 +62,7 @@ Signed-By:
  pw==
  =tIux
  -----END PGP PUBLIC KEY BLOCK-----
-"
+ "
         };
 
         var allSources = new List<AptPackageSource>();
@@ -127,7 +130,6 @@ Signed-By:
             try
             {
                 var packages = await source.FetchPackagesAsync(httpClient, onProgress);
-                Console.WriteLine($"Found {packages.Count} packages in {source.ServerUrl} {source.Suite}");
                 allPackages.AddRange(packages);
             }
             catch (Exception ex)
