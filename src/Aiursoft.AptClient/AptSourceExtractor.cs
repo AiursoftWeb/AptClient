@@ -6,11 +6,11 @@ public class AptSourceExtractor
 {
     public static List<AptPackageSource> ExtractSources(string fileContent, string targetArch)
     {
-        // Simple heuristic: if it contains "Types:", it's likely deb822. 
+        // Simple heuristic: if it contains "Types:", it's likely deb822.
         // If lines start with "deb ", it's legacy.
         // A robust way uses the first non-comment line.
         var firstLine = fileContent.Split('\n').Select(l => l.Trim()).FirstOrDefault(l => !string.IsNullOrEmpty(l) && !l.StartsWith("#"));
-        
+
         if (firstLine != null && (firstLine.StartsWith("Types:", StringComparison.OrdinalIgnoreCase) || fileContent.Contains("Types:")))
         {
             return ExtractDeb822Sources(fileContent, targetArch);
@@ -25,7 +25,7 @@ public class AptSourceExtractor
     {
         var sources = new List<AptPackageSource>();
         var repoCache = new Dictionary<string, AptRepository>();
-        
+
         // Split by double newline to separate stanzas
         // Normalize line endings first
         var normalized = fileContent.Replace("\r\n", "\n");
@@ -34,18 +34,18 @@ public class AptSourceExtractor
         foreach (var block in blocks)
         {
             if (string.IsNullOrWhiteSpace(block)) continue;
-            
+
             var dict = ParseDeb822Block(block);
 
             // Filter Types: deb
             if (dict.TryGetValue("Types", out var type) && !type.Contains("deb")) continue;
-            
+
             if (!dict.TryGetValue("URIs", out var urisLine)) continue;
             if (!dict.TryGetValue("Suites", out var suitesLine)) continue;
             if (!dict.TryGetValue("Components", out var componentsLine)) continue;
 
             string? signedBy = null;
-            if (dict.TryGetValue("Signed-By", out var sb)) 
+            if (dict.TryGetValue("Signed-By", out var sb))
             {
                 signedBy = HandleSignedBy(sb);
             }
@@ -80,16 +80,16 @@ public class AptSourceExtractor
     {
         var sources = new List<AptPackageSource>();
         var repoCache = new Dictionary<string, AptRepository>();
-        
+
         var lines = fileContent.Split('\n');
         foreach (var line in lines)
         {
             var trimmed = line.Trim();
             if (string.IsNullOrWhiteSpace(trimmed) || trimmed.StartsWith("#")) continue;
-            
+
             // Format: deb [options] uri suite component1 component2 ...
             // Options are optional, enclosed in []
-            
+
             if (!trimmed.StartsWith("deb ")) continue; // We only support binary 'deb' for now, not 'deb-src'
 
             var rest = trimmed.Substring(4).Trim();
@@ -148,7 +148,7 @@ public class AptSourceExtractor
         {
             var tempAsc = Path.GetTempFileName();
             var tempGpg = tempAsc + ".gpg"; // Target binary path
-            
+
             // Handle the dot '.' indent convention in deb822
             // Deb822 multiline values usually start with space. Empty lines are " .".
             // We strip the leading space if we parsed it manually, but ParseDeb822Block might have kept it?
@@ -156,20 +156,20 @@ public class AptSourceExtractor
             // If the original file had " .", ParseDeb822Block (simple one) might capture it as ".".
             // Let's being robust:
             var lines = content.Split('\n');
-            var cleanLines = lines.Select(l => 
+            var cleanLines = lines.Select(l =>
             {
                 var trimmed = l.Trim();
                 if (trimmed == ".") return ""; // Convert " ." to empty line
                 return l; // Keep original indentation (PGP handles it, or should we trim?)
                 // Actually PGP blocks inside deb822 often have 1 space indent.
-                // gpg --dearmor is quite standardcompliant, it ignores non-base64 chars? 
+                // gpg --dearmor is quite standardcompliant, it ignores non-base64 chars?
                 // Best to trim start?
                 // Let's try to keeping it simple: just handle the dot.
             });
             var cleanContent = string.Join("\n", cleanLines);
 
             File.WriteAllText(tempAsc, cleanContent);
-            
+
             // Try to de-armor using gpg
             try
             {
@@ -182,18 +182,18 @@ public class AptSourceExtractor
                     UseShellExecute = false,
                     CreateNoWindow = true
                 };
-                
+
                 using var p = System.Diagnostics.Process.Start(psi);
                 if (p != null)
                 {
-                    var stderr = p.StandardError.ReadToEnd();
+                    p.StandardError.ReadToEnd();
                     p.WaitForExit(5000); // 5 seconds timeout
-                    
+
                     if (p.ExitCode == 0 && File.Exists(tempGpg))
                     {
-                         // Success!
-                         try { File.Delete(tempAsc); } catch { }
-                         return tempGpg;
+                        // Success!
+                        try { File.Delete(tempAsc); } catch (Exception) { /* Ignore */ }
+                        return tempGpg;
                     }
                     else
                     {
@@ -203,7 +203,7 @@ public class AptSourceExtractor
                     }
                 }
             }
-            catch
+            catch (Exception)
             {
                 // gpg tool missing or execution failed
             }
@@ -225,11 +225,11 @@ public class AptSourceExtractor
     private static Dictionary<string, string> ParseDeb822Block(string block)
     {
         var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        // This is a simplified debounce parser. 
-        // Real deb822 supports folding. 
+        // This is a simplified debounce parser.
+        // Real deb822 supports folding.
         // Field: value
         //  continued value
-        
+
         string? currentKey = null;
         string currentValue = "";
 
@@ -246,7 +246,7 @@ public class AptSourceExtractor
                 {
                     // Deb822 continuation preserves newlines typically, but usually we just append.
                     // For Signed-By, we want to preserve structure.
-                    currentValue += "\n" + line.TrimStart(); 
+                    currentValue += "\n" + line.TrimStart();
                 }
             }
             else
@@ -265,7 +265,7 @@ public class AptSourceExtractor
                 }
             }
         }
-        
+
         if (currentKey != null)
         {
             result[currentKey] = currentValue;

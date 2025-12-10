@@ -49,7 +49,6 @@ public class AptPackageSource
         }
 
         // 3. Parse
-        if (stream == null) return new List<DebianPackageFromApt>();
 
         using (stream)
         {

@@ -77,7 +77,6 @@ public static class DebianPackageParser
             if (parts.Length >= 3)
             {
                 var hash = parts[0];
-                var size = parts[1]; // We could use this for extra validation
                 var path = parts[2];
                 result[path] = hash;
             }
@@ -102,8 +101,8 @@ public static class DebianPackageParser
             DescriptionMd5 = GetReq("Description-md5"),
             Section = GetReq("Section"),
             Priority = GetReq("Priority"),
-            Origin = GetOpt("Origin"), // Often missing in PPAs
-            Bugs = GetOpt("Bugs"), // Often missing
+            Origin = GetOpt("Origin") ?? string.Empty, // Often missing in PPAs
+            Bugs = GetOpt("Bugs") ?? string.Empty, // Often missing
 
             Filename = GetReq("Filename"),
             Size = GetReq("Size"),

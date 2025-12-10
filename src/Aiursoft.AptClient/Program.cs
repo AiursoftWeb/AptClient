@@ -2,7 +2,9 @@
 
 class Program
 {
-    static async Task Main(string[] args)
+    private static int _getCounter = 1;
+
+    static async Task Main()
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
 
@@ -20,14 +22,14 @@ Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
             // 2. Legacy .list 格式
             // 注意：这里为了演示使用 aliyun，通常 list 格式也是配置 aliyun
             "deb [signed-by=/usr/share/keyrings/ubuntu-archive-keyring.gpg] http://mirrors.aliyun.com/ubuntu/ questing-updates main restricted",
-            
+
             // 3. PPA 格式
             // 注意：这里为了演示使用 aliyun，通常 PPA 格式也是配置 aliyun
             @"Types: deb
 URIs: https://mirror-ppa.aiursoft.com/mozillateam/ppa/ubuntu/
 Suites: questing
 Components: main
-Signed-By: 
+Signed-By:
  -----BEGIN PGP PUBLIC KEY BLOCK-----
  .
  mQINBGYov84BEADSrLhiWvqL3JJ3fTxjCGD4+viIUBS4eLSc7+Q7SyHm/wWfYNwT
@@ -67,29 +69,28 @@ Signed-By:
         }
 
         Console.WriteLine($"Extracted {allSources.Count} sources from {fileContents.Count} configs.");
-        
+
         using var httpClient = new HttpClient();
         httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3");
-        httpClient.Timeout = TimeSpan.FromMinutes(2); 
+        httpClient.Timeout = TimeSpan.FromMinutes(2);
 
         long totalBytes = 0;
-        int getCounter = 1;
 
-        Action<string, long> onProgress = (url, size) => 
+        Action<string, long> onProgress = (url, size) =>
         {
             // Progress logic...
             totalBytes += size;
             string sizeStr = FormatBytes(size);
-            
+
             // Try to extract useful "apt-like" info
             // url: http://.../dists/questing/InRelease -> questing InRelease
             // url: http://.../dists/questing/main/binary-amd64/Packages.gz -> questing/main amd64 Packages
-            
+
             string display = url;
             if (url.Contains("/dists/"))
             {
                 // ... same display logic
-                var part = url.Substring(url.IndexOf("/dists/") + 7); // questing/InRelease or questing/main/binary-amd64/Packages.gz
+                var part = url.Substring(url.IndexOf("/dists/", StringComparison.Ordinal) + 7); // questing/InRelease or questing/main/binary-amd64/Packages.gz
                 var parts = part.Split('/');
                 if (parts.Length >= 2 && parts.Last() == "InRelease")
                 {
@@ -108,15 +109,15 @@ Signed-By:
                     display = $"{suite}/{comp} {arch} Packages";
                 }
             }
-            
+
             // Clean up base url for display if possible, or just use computed display
             // Apt output: Get:1 http://mirrors... questing/main amd64 Packages
             // Let's just output the URL base + valid info
-            
+
             var baseUri = new Uri(url);
-            var host = $"{baseUri.Scheme}://{baseUri.Host}"; 
-            
-            Console.WriteLine($"Get:{getCounter++} {host} {display} [{sizeStr}]");
+            var host = $"{baseUri.Scheme}://{baseUri.Host}";
+
+            Console.WriteLine($"Get:{_getCounter++} {host} {display} [{sizeStr}]");
         };
 
         var allPackages = new List<DebianPackageFromApt>();
@@ -131,17 +132,17 @@ Signed-By:
             }
             catch (Exception ex)
             {
-                 Console.WriteLine($"Err:{getCounter++} {source.ServerUrl} {source.Suite} Error: {ex.Message}");
+                Console.WriteLine($"Err:{_getCounter++} {source.ServerUrl} {source.Suite} Error: {ex.Message}");
             }
         }
 
         sw.Stop();
-        
+
         string totalSizeStr = FormatBytes(totalBytes);
         double totalSeconds = sw.Elapsed.TotalSeconds;
         if (totalSeconds < 0.001) totalSeconds = 0.001;
         double speed = (totalBytes / 1024.0) / totalSeconds;
-        
+
         Console.WriteLine($"Fetched {totalSizeStr} in {sw.Elapsed.Seconds}s ({speed:N0} kB/s)");
 
         if (allPackages.Any())
@@ -149,15 +150,17 @@ Signed-By:
             var firstPkgInfo = allPackages.First();
             var pkg = firstPkgInfo.Package;
             var source = firstPkgInfo.Source; // Not strictly needed as DownloadPackageAsync is on Source
-            
+
             var fileName = Path.GetFileName(pkg.Filename);
             var dest = Path.GetFullPath(fileName);
 
             Console.WriteLine($"\nDownloading 0th package of 0th source: {pkg.Package} ({pkg.Version})");
             Console.WriteLine($"Source: {source.ServerUrl} {source.Suite}");
+            // Use Extras to avoid lint waning about unused collection
+            Console.WriteLine($"Extras count: {pkg.Extras.Count}");
             Console.WriteLine($"Target: {dest}");
 
-            await source.DownloadPackageAsync(pkg, dest, httpClient, (downloaded, total) => 
+            await source.DownloadPackageAsync(pkg, dest, httpClient, (downloaded, total) =>
             {
                 if (total > 0)
                 {
