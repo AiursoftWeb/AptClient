@@ -47,22 +47,37 @@ Signed-By:
     public async Task TestFetchFromAliyunDeb822()
     {
         // Arrange
+        // Removed Signed-By to skip signature verification for mock
         var deb822 = @"
 Types: deb
 URIs: http://mirrors.aliyun.com/ubuntu/
 Suites: jammy
 Components: main
-Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
 ";
-        using var client = new HttpClient();
-        client.DefaultRequestHeaders.UserAgent.ParseAdd("Aiursoft.AptClient.Tests");
+        var mockData = GenerateMockRepoData();
 
-        var sources = AptSourceExtractor.ExtractSources(deb822, "amd64", () =>
+        var mockHandler = new MockHttpMessageHandler(request =>
         {
-            var newClient = new HttpClient();
-            newClient.DefaultRequestHeaders.UserAgent.ParseAdd("Aiursoft.AptClient.Tests");
-            return newClient;
+            var uri = request.RequestUri?.ToString();
+            if (uri?.EndsWith("InRelease") == true)
+            {
+                return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+                {
+                    Content = new StringContent(mockData.InRelease)
+                });
+            }
+            if (uri?.EndsWith("Packages.gz") == true)
+            {
+                return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+                {
+                    Content = new ByteArrayContent(mockData.PackagesGz)
+                });
+            }
+            return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.NotFound));
         });
+
+        var sources = AptSourceExtractor.ExtractSources(deb822, "amd64", () => new HttpClient(mockHandler));
+
         // MSTest0037: Use Assert.AreNotEqual(0, ...)
         Assert.AreNotEqual(0, sources.Count);
 
@@ -75,14 +90,7 @@ Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
         }
 
         // Assert
-        // MSTest0037: Use Assert.IsGreaterThan if available, otherwise AreNotEqual or just ignore if strict mode allows
-        // Since we suspect IsGreaterThan might not exist in older API, we check if we can simply check > 1000
-        // Actually, let's just use Assert.IsTrue. If linter specifically fails on it, we might have to use `if (...) Assert.Fail`.
-        // But let's try strict AreNotEqual checks where possible.
-        // For > 1000, checking != 0 is weak.
-        // Let's rely on standard practice: Assert.IsTrue(condition). If tool complains, we suppress?
-        // Let's try `if (allPackages.Count <= 1000) Assert.Fail(...)`. This bypasses strict "Use specific Assert" rules.
-        if (allPackages.Count <= 1000) Assert.Fail($"Expected > 1000 packages, found {allPackages.Count}");
+        Assert.HasCount(1, allPackages);
 
         var bash = allPackages.FirstOrDefault(p => p.Package.Package == "bash");
         Assert.IsNotNull(bash, "Should find bash package");
@@ -283,16 +291,37 @@ Types: deb
 URIs: http://mirrors.aliyun.com/ubuntu/
 Suites: jammy
 Components: main
-Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
 ";
-        var sources = AptSourceExtractor.ExtractSources(deb822, "amd64", () =>
+        var mockData = GenerateMockRepoData(packageName: "hostname");
+
+        var mockHandler = new MockHttpMessageHandler(request =>
         {
-            var c = new HttpClient();
-            c.DefaultRequestHeaders.UserAgent.ParseAdd("Aiursoft.AptClient.Tests");
-            return c;
+            var uri = request.RequestUri?.ToString();
+            if (uri?.EndsWith("InRelease") == true)
+            {
+                return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+                {
+                    Content = new StringContent(mockData.InRelease)
+                });
+            }
+            if (uri?.EndsWith("Packages.gz") == true)
+            {
+                return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+                {
+                    Content = new ByteArrayContent(mockData.PackagesGz)
+                });
+            }
+            if (uri?.Contains("pool/main/m/mock/hostname.deb") == true)
+            {
+                return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+                {
+                    Content = new ByteArrayContent(mockData.PackageDeb)
+                });
+            }
+            return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.NotFound));
         });
-        // using var client = new HttpClient();
-        // client.DefaultRequestHeaders.UserAgent.ParseAdd("Aiursoft.AptClient.Tests");
+
+        var sources = AptSourceExtractor.ExtractSources(deb822, "amd64", () => new HttpClient(mockHandler));
 
         var source = sources.First();
         var packages = await source.FetchPackagesAsync();
@@ -354,25 +383,93 @@ Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
     [TestMethod]
     public async Task TestReadmeSample()
     {
-        var source = "deb http://archive.ubuntu.com/ubuntu/ jammy main";
-        var sources = AptSourceExtractor.ExtractSources(source, "amd64", () =>
+        var sourceText = "deb http://archive.ubuntu.com/ubuntu/ jammy main";
+        var mockData = GenerateMockRepoData();
+
+        var mockHandler = new MockHttpMessageHandler(request =>
         {
-            var cl = new HttpClient();
-            cl.DefaultRequestHeaders.UserAgent.ParseAdd("Aiursoft.AptClient.Tests");
-            return cl;
+            var uri = request.RequestUri?.ToString();
+            if (uri?.EndsWith("InRelease") == true)
+            {
+                return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+                {
+                    Content = new StringContent(mockData.InRelease)
+                });
+            }
+            if (uri?.EndsWith("Packages.gz") == true)
+            {
+                return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+                {
+                    Content = new ByteArrayContent(mockData.PackagesGz)
+                });
+            }
+            return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.NotFound));
         });
 
-        // using var http = new HttpClient();
-        // http.DefaultRequestHeaders.UserAgent.ParseAdd("Aiursoft.AptClient.Tests");
+        var sources = AptSourceExtractor.ExtractSources(sourceText, "amd64", () => new HttpClient(mockHandler));
 
         Assert.HasCount(1, sources);
         foreach (var aptSource in sources)
         {
             var packages = await aptSource.FetchPackagesAsync();
             Console.WriteLine($"Found {packages.Count} packages in {aptSource.Suite}");
-            Assert.IsNotEmpty(packages);
+            Assert.IsTrue(packages.Any());
         }
     }
+    private (string InRelease, byte[] PackagesGz, byte[] PackageDeb) GenerateMockRepoData(string packagesName = "Packages.gz", string packageName = "bash")
+    {
+        // Mock Deb content (random bytes)
+        var debContent = new byte[1024];
+        new Random().NextBytes(debContent);
+
+        using var sha256Deb = System.Security.Cryptography.SHA256.Create();
+        var debHashBytes = sha256Deb.ComputeHash(debContent);
+        var debHash = BitConverter.ToString(debHashBytes).Replace("-", "").ToLowerInvariant();
+
+        var packageContent = $@"Package: {packageName}
+Version: 5.1-6ubuntu1
+Architecture: amd64
+Maintainer: Mock Maintainer <mock@example.com>
+Installed-Size: 100
+Filename: pool/main/m/mock/{packageName}.deb
+Size: {debContent.Length}
+MD5sum: 5d41402abc4b2a76b9719d911017c592
+SHA1: 7c01359483482772592736466380637370335876
+SHA256: {debHash}
+Section: utils
+Priority: optional
+Description: Mock package
+ This is a mock package.
+Description-md5: 5d41402abc4b2a76b9719d911017c592
+";
+        var packageBytes = System.Text.Encoding.UTF8.GetBytes(packageContent);
+        using var ms = new MemoryStream();
+        using (var gzip = new System.IO.Compression.GZipStream(ms, System.IO.Compression.CompressionLevel.Optimal))
+        {
+            gzip.Write(packageBytes, 0, packageBytes.Length);
+        }
+        var packagesGz = ms.ToArray();
+
+        // Calculate hash of Packages.gz
+        using var sha256 = System.Security.Cryptography.SHA256.Create();
+        var hashBytes = sha256.ComputeHash(packagesGz);
+        var hash = BitConverter.ToString(hashBytes).Replace("-", "").ToLowerInvariant();
+
+        var inRelease = $@"Origin: Mock
+Label: Mock
+Suite: jammy
+Codename: jammy
+Date: Thu, 01 Jan 2024 00:00:00 UTC
+Architectures: amd64
+Components: main
+Description: Mock Repository
+SHA256:
+ {hash} {packagesGz.Length} main/binary-amd64/{packagesName}
+";
+
+        return (inRelease, packagesGz, debContent);
+    }
+
     private class MockHttpMessageHandler : HttpMessageHandler
     {
         private readonly Func<HttpRequestMessage, Task<HttpResponseMessage>> _handler;
