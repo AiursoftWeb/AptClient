@@ -1,4 +1,7 @@
 using System.IO.Compression;
+using System.Runtime.CompilerServices;
+
+[assembly: InternalsVisibleTo("Aiursoft.AptClient.Tests")]
 
 namespace Aiursoft.AptClient;
 
@@ -15,17 +18,20 @@ public class AptPackageSource
     public string ServerUrl => _repository.BaseUrl;
     public string Suite => _repository.Suite;
 
-    public AptPackageSource(AptRepository repository, string component, string arch)
+    private readonly Func<HttpClient> _httpClientFactory;
+
+    public AptPackageSource(AptRepository repository, string component, string arch, Func<HttpClient>? httpClientFactory = null)
     {
         _repository = repository;
         Component = component;
         Arch = arch;
+        _httpClientFactory = httpClientFactory ?? (() => new HttpClient());
     }
 
-    public async Task<List<DebianPackageFromApt>> FetchPackagesAsync(HttpClient client, Action<string, long>? progress = null)
+    public async Task<List<DebianPackageFromApt>> FetchPackagesAsync(Action<string, long>? progress = null)
     {
         // 1. Ensure Repository is trusted (this will happen automatically inside GetValidatedStreamAsync but doing explicit call is fine too)
-        // await _repository.EnsureVerifiedAsync(client, progress);
+        // await _repository.EnsureVerifiedAsync(progress);
 
         // 2. Construct paths
         // Priority 1: .gz
@@ -35,7 +41,7 @@ public class AptPackageSource
         Stream? stream;
         try
         {
-            stream = await _repository.GetValidatedStreamAsync(client, relPathGz, progress);
+            stream = await _repository.GetValidatedStreamAsync(relPathGz, progress);
             // It's GZ, wrap it
             stream = new GZipStream(stream, CompressionMode.Decompress);
         }
@@ -45,7 +51,7 @@ public class AptPackageSource
             // Specifically we should catch 404 or HashMismatch?
             // If HashMismatch, we probably shouldn't try Raw unless we clear cache?
             // For now, simple fallback logic:
-            stream = await _repository.GetValidatedStreamAsync(client, relPathRaw, progress);
+            stream = await _repository.GetValidatedStreamAsync(relPathRaw, progress);
         }
 
         // 3. Parse
@@ -66,7 +72,10 @@ public class AptPackageSource
     /// <summary>
     /// Downloads a specific package (.deb) and verifies its SHA256 checksum.
     /// </summary>
-    public async Task DownloadPackageAsync(DebianPackage package, string destinationPath, HttpClient client, Action<long, long>? progress = null)
+    /// <summary>
+    /// Downloads a specific package (.deb) and verifies its SHA256 checksum.
+    /// </summary>
+    public async Task DownloadPackageAsync(DebianPackage package, string destinationPath, Action<long, long>? progress = null)
     {
         // Filename in package is relative to the repository root (e.g. pool/main/a/acl/acl_2.2.53-6_amd64.deb)
         var url = $"{_repository.BaseUrl}{package.Filename}";
@@ -75,6 +84,7 @@ public class AptPackageSource
         var dir = Path.GetDirectoryName(destinationPath);
         if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
 
+        using var client = _httpClientFactory();
         try
         {
             using var response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);

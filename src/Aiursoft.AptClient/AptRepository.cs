@@ -11,7 +11,8 @@ public class AptRepository
     private Dictionary<string, string>? _trustedHashes;
     private bool _isVerified;
 
-    public AptRepository(string baseUrl, string suite, string? signedBy)
+
+    public AptRepository(string baseUrl, string suite, string? signedBy, Func<HttpClient>? httpClientFactory = null)
     {
         // Ensure BaseUrl ends with /
         BaseUrl = baseUrl.EndsWith("/") ? baseUrl : baseUrl + "/";
@@ -23,11 +24,12 @@ public class AptRepository
     /// Ensures the repository metadata (InRelease) is downloaded and verified.
     /// Uses a semaphore/lock internally if needed, but for simplicity we rely on Task await.
     /// </summary>
-    public async Task EnsureVerifiedAsync(HttpClient client, Action<string, long>? progress = null)
+    public async Task EnsureVerifiedAsync(Action<string, long>? progress = null)
     {
         if (_isVerified && _trustedHashes != null) return;
 
         var inReleaseUrl = $"{BaseUrl}dists/{Suite}/InRelease";
+        using var client = new HttpClient();
 
         // 1. Download InRelease data as bytes to preserve exact signature
         byte[] inReleaseBytes;
@@ -52,7 +54,7 @@ public class AptRepository
             bool isValid = await AptGpgVerifier.VerifyInReleaseAsync(inReleaseBytes, SignedBy);
             if (!isValid)
             {
-                 throw new Exception($"GPG Verification failed for {InReleaseUrl} using key {SignedBy}");
+                throw new Exception($"GPG Verification failed for {InReleaseUrl} using key {SignedBy}");
             }
         }
 
@@ -66,25 +68,26 @@ public class AptRepository
     /// <summary>
     /// Downloads a file that MUST exist in the trusted hash list.
     /// </summary>
-    public async Task<Stream> GetValidatedStreamAsync(HttpClient client, string relativePath, Action<string, long>? progress = null)
+    public async Task<Stream> GetValidatedStreamAsync(string relativePath, Action<string, long>? progress = null)
     {
         // Ensure verification
-        if (!_isVerified) await EnsureVerifiedAsync(client, progress);
+        if (!_isVerified) await EnsureVerifiedAsync(progress);
 
         // relativePath is like "main/binary-amd64/Packages.gz"
         // We check if it is in the trusted hashes
         if (_trustedHashes == null || !_trustedHashes.TryGetValue(relativePath, out var expectedHash))
         {
-             // If validation is required (SignedBy is set), we SHOULD expect a hash.
-             // If SignedBy is null, maybe we are looser?
-             if (!string.IsNullOrWhiteSpace(SignedBy))
-             {
-                 throw new Exception($"File {relativePath} is not listed in InRelease checksums! Cannot trust it.");
-             }
-             expectedHash = null;
+            // If validation is required (SignedBy is set), we SHOULD expect a hash.
+            // If SignedBy is null, maybe we are looser?
+            if (!string.IsNullOrWhiteSpace(SignedBy))
+            {
+                throw new Exception($"File {relativePath} is not listed in InRelease checksums! Cannot trust it.");
+            }
+            expectedHash = null;
         }
 
         var url = $"{BaseUrl}dists/{Suite}/{relativePath}";
+        using var client = new HttpClient();
 
         // Download
         var response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
@@ -94,7 +97,10 @@ public class AptRepository
 
         if (expectedHash == null)
         {
-            return await response.Content.ReadAsStreamAsync();
+            var ms = new MemoryStream();
+            await response.Content.CopyToAsync(ms);
+            ms.Position = 0;
+            return ms;
         }
 
         // Validate Hash (Must read all bytes)

@@ -72,11 +72,6 @@ Signed-By:
         }
 
         Console.WriteLine($"Extracted {allSources.Count} sources from {fileContents.Count} configs.");
-
-        using var httpClient = new HttpClient();
-        httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3");
-        httpClient.Timeout = TimeSpan.FromMinutes(2);
-
         long totalBytes = 0;
 
         Action<string, long> onProgress = (url, size) =>
@@ -129,7 +124,7 @@ Signed-By:
         {
             try
             {
-                var packages = await source.FetchPackagesAsync(httpClient, onProgress);
+                var packages = await source.FetchPackagesAsync(onProgress);
                 allPackages.AddRange(packages);
             }
             catch (Exception ex)
@@ -162,7 +157,7 @@ Signed-By:
             Console.WriteLine($"Extras count: {pkg.Extras.Count}");
             Console.WriteLine($"Target: {dest}");
 
-            await source.DownloadPackageAsync(pkg, dest, httpClient, (downloaded, total) =>
+            await source.DownloadPackageAsync(pkg, dest, (downloaded, total) =>
             {
                 if (total > 0)
                 {

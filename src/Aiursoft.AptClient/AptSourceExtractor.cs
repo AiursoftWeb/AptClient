@@ -4,7 +4,7 @@ namespace Aiursoft.AptClient;
 
 public class AptSourceExtractor
 {
-    public static List<AptPackageSource> ExtractSources(string fileContent, string targetArch)
+    public static List<AptPackageSource> ExtractSources(string fileContent, string targetArch, Func<HttpClient>? httpClientFactory = null)
     {
         // Simple heuristic: if it contains "Types:", it's likely deb822.
         // If lines start with "deb ", it's legacy.
@@ -13,15 +13,15 @@ public class AptSourceExtractor
 
         if (firstLine != null && (firstLine.StartsWith("Types:", StringComparison.OrdinalIgnoreCase) || fileContent.Contains("Types:")))
         {
-            return ExtractDeb822Sources(fileContent, targetArch);
+            return ExtractDeb822Sources(fileContent, targetArch, httpClientFactory);
         }
         else
         {
-            return ExtractLegacySources(fileContent, targetArch);
+            return ExtractLegacySources(fileContent, targetArch, httpClientFactory);
         }
     }
 
-    private static List<AptPackageSource> ExtractDeb822Sources(string fileContent, string targetArch)
+    private static List<AptPackageSource> ExtractDeb822Sources(string fileContent, string targetArch, Func<HttpClient>? httpClientFactory)
     {
         var sources = new List<AptPackageSource>();
         var repoCache = new Dictionary<string, AptRepository>();
@@ -62,13 +62,13 @@ public class AptSourceExtractor
                     var repoKey = $"{uri}|{suite}";
                     if (!repoCache.TryGetValue(repoKey, out var repo))
                     {
-                        repo = new AptRepository(uri, suite, signedBy);
+                        repo = new AptRepository(uri, suite, signedBy, httpClientFactory);
                         repoCache[repoKey] = repo;
                     }
 
                     foreach (var component in componentList)
                     {
-                        sources.Add(new AptPackageSource(repo, component, targetArch));
+                        sources.Add(new AptPackageSource(repo, component, targetArch, httpClientFactory));
                     }
                 }
             }
@@ -76,7 +76,7 @@ public class AptSourceExtractor
         return sources;
     }
 
-    private static List<AptPackageSource> ExtractLegacySources(string fileContent, string targetArch)
+    private static List<AptPackageSource> ExtractLegacySources(string fileContent, string targetArch, Func<HttpClient>? httpClientFactory)
     {
         var sources = new List<AptPackageSource>();
         var repoCache = new Dictionary<string, AptRepository>();
@@ -126,13 +126,13 @@ public class AptSourceExtractor
             var repoKey = $"{uri}|{suite}";
             if (!repoCache.TryGetValue(repoKey, out var repo))
             {
-                repo = new AptRepository(uri, suite, signedBy);
+                repo = new AptRepository(uri, suite, signedBy, httpClientFactory);
                 repoCache[repoKey] = repo;
             }
 
             foreach (var component in components)
             {
-                sources.Add(new AptPackageSource(repo, component, targetArch));
+                sources.Add(new AptPackageSource(repo, component, targetArch, httpClientFactory));
             }
         }
 

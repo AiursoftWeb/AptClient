@@ -54,18 +54,23 @@ Suites: jammy
 Components: main
 Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
 ";
-        var sources = AptSourceExtractor.ExtractSources(deb822, "amd64");
-        // MSTest0037: Use Assert.AreNotEqual(0, ...)
-        Assert.AreNotEqual(0, sources.Count);
-
         using var client = new HttpClient();
         client.DefaultRequestHeaders.UserAgent.ParseAdd("Aiursoft.AptClient.Tests");
+
+        var sources = AptSourceExtractor.ExtractSources(deb822, "amd64", () =>
+        {
+            var newClient = new HttpClient();
+            newClient.DefaultRequestHeaders.UserAgent.ParseAdd("Aiursoft.AptClient.Tests");
+            return newClient;
+        });
+        // MSTest0037: Use Assert.AreNotEqual(0, ...)
+        Assert.AreNotEqual(0, sources.Count);
 
         // Act
         var allPackages = new List<DebianPackageFromApt>();
         foreach (var source in sources)
         {
-            var packages = await source.FetchPackagesAsync(client);
+            var packages = await source.FetchPackagesAsync();
             allPackages.AddRange(packages);
         }
 
@@ -139,7 +144,7 @@ Cgkyr330gZviGGcQtRQAAPjID/9+ABCDEF1234567890ABCDEF1234567890ABCD
     public async Task TestSignatureVerification_FailsOnGarbageSignature()
     {
         // Arrange
-        var sources = AptSourceExtractor.ExtractSources(IntegratedSigned, "amd64");
+        var sources = AptSourceExtractor.ExtractSources(IntegratedSigned, "amd64", () => new HttpClient(mockHandler));
         var source = sources.First();
 
         var mockHandler = new MockHttpMessageHandler(request =>
@@ -164,12 +169,12 @@ THIS_IS_TOTAL_GARBAGE_NOT_EVEN_BASE64
             return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.NotFound));
         });
 
-        using var client = new HttpClient(mockHandler);
+        // using var client = new HttpClient(mockHandler);
 
         // Act & Assert
         try
         {
-            await source.FetchPackagesAsync(client);
+            await source.FetchPackagesAsync();
             Assert.Fail("Expected exception was not thrown.");
 
         }
@@ -183,7 +188,7 @@ THIS_IS_TOTAL_GARBAGE_NOT_EVEN_BASE64
     public async Task TestSignatureVerification_FailsOnNoSignature()
     {
         // Arrange
-        var sources = AptSourceExtractor.ExtractSources(IntegratedSigned, "amd64");
+        var sources = AptSourceExtractor.ExtractSources(IntegratedSigned, "amd64", () => new HttpClient(mockHandler));
         var source = sources.First();
 
         var mockHandler = new MockHttpMessageHandler(request =>
@@ -227,7 +232,7 @@ Suites: jammy
 Components: main
 Signed-By:
 ";
-        var sources = AptSourceExtractor.ExtractSources(deb822, "amd64");
+        var sources = AptSourceExtractor.ExtractSources(deb822, "amd64", () => new HttpClient(mockHandler));
         var source = sources.First();
 
         var mockHandler = new MockHttpMessageHandler(request =>
@@ -288,12 +293,17 @@ Suites: jammy
 Components: main
 Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
 ";
-        var sources = AptSourceExtractor.ExtractSources(deb822, "amd64");
-        using var client = new HttpClient();
-        client.DefaultRequestHeaders.UserAgent.ParseAdd("Aiursoft.AptClient.Tests");
+        var sources = AptSourceExtractor.ExtractSources(deb822, "amd64", () =>
+        {
+            var c = new HttpClient();
+            c.DefaultRequestHeaders.UserAgent.ParseAdd("Aiursoft.AptClient.Tests");
+            return c;
+        });
+        // using var client = new HttpClient();
+        // client.DefaultRequestHeaders.UserAgent.ParseAdd("Aiursoft.AptClient.Tests");
 
         var source = sources.First();
-        var packages = await source.FetchPackagesAsync(client);
+        var packages = await source.FetchPackagesAsync();
 
         var pkgInfo = packages.FirstOrDefault(p => p.Package.Package == "hostname");
         Assert.IsNotNull(pkgInfo, "Should find hostname package");
@@ -302,7 +312,7 @@ Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
 
         try
         {
-            await source.DownloadPackageAsync(pkgInfo.Package, tempFile, client);
+            await source.DownloadPackageAsync(pkgInfo.Package, tempFile);
 
             Assert.IsTrue(File.Exists(tempFile));
             // Assert.IsTrue(info.Length > 0) -> Assert.AreNotEqual(0, ...)
@@ -317,18 +327,23 @@ Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
     [TestMethod]
     public async Task TestFetchFromIntegratedSigned()
     {
-        var sources = AptSourceExtractor.ExtractSources(IntegratedSigned, "amd64");
+        var sources = AptSourceExtractor.ExtractSources(IntegratedSigned, "amd64", () =>
+        {
+            var cl = new HttpClient();
+            cl.DefaultRequestHeaders.UserAgent.ParseAdd("Aiursoft.AptClient.Tests");
+            return cl;
+        });
         Assert.AreNotEqual(0, sources.Count);
 
-        using var client = new HttpClient();
-        client.DefaultRequestHeaders.UserAgent.ParseAdd("Aiursoft.AptClient.Tests");
+        // using var client = new HttpClient();
+        // client.DefaultRequestHeaders.UserAgent.ParseAdd("Aiursoft.AptClient.Tests");
 
         var allPackages = new List<DebianPackageFromApt>();
         foreach (var source in sources)
         {
             try
             {
-                var packages = await source.FetchPackagesAsync(client);
+                var packages = await source.FetchPackagesAsync();
                 allPackages.AddRange(packages);
             }
             catch (Exception ex)
@@ -348,15 +363,20 @@ Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
     public async Task TestReadmeSample()
     {
         var source = "deb http://archive.ubuntu.com/ubuntu/ jammy main";
-        var sources = AptSourceExtractor.ExtractSources(source, "amd64");
+        var sources = AptSourceExtractor.ExtractSources(source, "amd64", () =>
+        {
+            var cl = new HttpClient();
+            cl.DefaultRequestHeaders.UserAgent.ParseAdd("Aiursoft.AptClient.Tests");
+            return cl;
+        });
 
-        using var http = new HttpClient();
-        http.DefaultRequestHeaders.UserAgent.ParseAdd("Aiursoft.AptClient.Tests");
+        // using var http = new HttpClient();
+        // http.DefaultRequestHeaders.UserAgent.ParseAdd("Aiursoft.AptClient.Tests");
 
         Assert.HasCount(1, sources);
         foreach (var aptSource in sources)
         {
-            var packages = await aptSource.FetchPackagesAsync(http);
+            var packages = await aptSource.FetchPackagesAsync();
             Console.WriteLine($"Found {packages.Count} packages in {aptSource.Suite}");
             Assert.IsNotEmpty(packages);
         }
