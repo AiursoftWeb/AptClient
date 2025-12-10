@@ -429,7 +429,7 @@ Signed-By:
         }
         finally
         {
-            try { Directory.Delete(tempHome, true); } catch { }
+            try { Directory.Delete(tempHome, true); } catch (Exception e) { Console.WriteLine(e.Message); }
         }
     }
 
