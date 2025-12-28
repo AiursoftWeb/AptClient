@@ -6,37 +6,100 @@
 [![NuGet version (Aiursoft.AptClient)](https://img.shields.io/nuget/v/Aiursoft.AptClient.svg)](https://www.nuget.org/packages/Aiursoft.AptClient/)
 [![Man hours](https://manhours.aiursoft.com/r/gitlab.aiursoft.com/aiursoft/AptClient.svg)](https://manhours.aiursoft.com/r/gitlab.aiursoft.com/aiursoft/AptClient.html)
 
-A class lib that helps you manage apt packages from apt source.
+Aiursoft.AptClient is a professional .NET library designed for interacting with Debian-style APT repositories. It provides a comprehensive set of tools to parse repository configurations, fetch package indices, and securely download Debian packages with integrity verification.
 
-## How to install
+## Features
 
-To install `Aiursoft.AptClient` to your project, just run:
+- **Source Parsing**: Supports both modern Deb822 (`.sources`) and legacy one-line (`.list`) formats.
+- **PPA Support**: Handles PPA configurations, including those with inline GPG keys.
+- **Package Index Fetching**: Efficiently retrieves and parses package catalogs from remote repositories.
+- **Secure Downloads**: Downloads `.deb` files with automatic SHA256 checksum verification.
+- **Extensible**: Designed with abstractions to allow for easy integration and customization.
+
+## Installation
+
+To install `Aiursoft.AptClient` to your project, run the following command:
 
 ```bash
 dotnet add package Aiursoft.AptClient
 ```
 
-## Basic Usage
+## Detailed Usage
+
+### 1. Parsing APT Sources
+
+You can parse APT source configurations using `AptSourceExtractor`. The library supports multiple formats:
+
+#### Modern Deb822 Format
+```csharp
+var deb822 = @"
+Types: deb
+URIs: http://archive.ubuntu.com/ubuntu/
+Suites: jammy
+Components: main restricted
+Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+";
+
+var sources = AptSourceExtractor.ExtractSources(deb822, "amd64");
+```
+
+#### Legacy One-Line Format
+```csharp
+var legacy = "deb http://archive.ubuntu.com/ubuntu/ jammy main restricted";
+var sources = AptSourceExtractor.ExtractSources(legacy, "amd64");
+```
+
+### 2. Fetching Package Lists
+
+Once you have `AptPackageSource` objects, you can fetch the available packages:
 
 ```csharp
 using Aiursoft.AptClient;
 
-var source = "deb http://archive.ubuntu.com/ubuntu/ jammy main";
-var sources = AptSourceExtractor.ExtractSources(source, "amd64");
-
-foreach (var aptSource in sources)
+foreach (var source in sources)
 {
-    var packages = await aptSource.FetchPackagesAsync();
-    Console.WriteLine($"Found {packages.Count} packages in {aptSource.Suite}");
+    // Fetch packages with an optional progress callback
+    var packages = await source.FetchPackagesAsync((url, size) => 
+    {
+        Console.WriteLine($"Downloading {url} ({size} bytes)");
+    });
+
+    Console.WriteLine($"Found {packages.Count} packages in {source.Suite}");
 }
 ```
 
-For detailed usage, please refer to [usage.md](docs/usage.md).
+### 3. Downloading and Verifying Packages
 
-## How to contribute
+Download packages securely with automatic integrity checks:
 
-There are many ways to contribute to the project: logging bugs, submitting pull requests, reporting issues, and creating suggestions.
+```csharp
+var myPackageInfo = packages.FirstOrDefault(p => p.Package.Package == "curl");
 
-Even if you with push rights on the repository, you should create a personal fork and create feature branches there when you need them. This keeps the main repository clean and your workflow cruft out of sight.
+if (myPackageInfo != null)
+{
+    var package = myPackageInfo.Package;
+    var source = myPackageInfo.Source;
+    var destinationPath = "curl.deb";
 
-We're also interested in your feedback on the future of this project. You can submit a suggestion or feature request through the issue tracker. To make this process more effective, we're asking that these include more information to help define them more clearly.
+    await source.DownloadPackageAsync(package, destinationPath, (downloaded, total) => 
+    {
+        var percent = (double)downloaded / total * 100;
+        Console.Write($"\rProgress: {percent:F1}%");
+    });
+
+    Console.WriteLine("\nDownload complete and verified!");
+}
+```
+
+## How to Contribute
+
+We welcome contributions! You can help by:
+- Logging bugs and reporting issues.
+- Submitting pull requests for new features or bug fixes.
+- Suggesting improvements or new features through the issue tracker.
+
+Please create a personal fork and use feature branches for your contributions.
+
+## License
+
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
